@@ -10,6 +10,8 @@ const logger = pino({ level: process.env.LOG_LEVEL || "info" });
 const app = express();
 
 app.use(express.json());
+const ERROR_CODE = 500;
+
 app.use(
   pinoHttp({
     logger,

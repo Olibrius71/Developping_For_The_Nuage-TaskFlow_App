@@ -1,5 +1,5 @@
 require("./tracing");
-const { register } = require("./metrics");
+const { register, upstreamErrorsTotal } = require("./metrics");
 const express = require("express");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const pino = require("pino");
@@ -15,6 +15,8 @@ const TASK_SERVICE_URL =
   process.env.TASK_SERVICE_URL || "http://localhost:3002";
 const NOTIFICATION_SERVICE_URL =
   process.env.NOTIFICATION_SERVICE_URL || "http://localhost:3003";
+
+const ERROR_CODE = 500;
 
 app.use(
   pinoHttp({
@@ -56,6 +58,7 @@ app.use(
     on: {
       error: (err, req, res) => {
         logger.error({ err }, "user-service proxy error");
+        upstreamErrorsTotal.labels("user-service").inc();
         res.status(502).json({ error: "user-service unavailable" });
       },
     },
@@ -72,6 +75,7 @@ app.use(
     on: {
       error: (err, req, res) => {
         logger.error({ err }, "task-service proxy error");
+        upstreamErrorsTotal.labels("task-service").inc();
         res.status(502).json({ error: "task-service unavailable" });
       },
     },
@@ -88,6 +92,7 @@ app.use(
     on: {
       error: (err, req, res) => {
         logger.error({ err }, "notification-service proxy error");
+        upstreamErrorsTotal.labels("notification-service").inc();
         res.status(502).json({ error: "notification-service unavailable" });
       },
     },
