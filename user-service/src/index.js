@@ -1,5 +1,5 @@
 require("./tracing");
-const { register } = require("./metrics");
+const { register, httpRequestsTotal, httpRequestDurationMs } = require("./metrics");
 const express = require("express");
 const pino = require("pino");
 const pinoHttp = require("pino-http");
@@ -10,6 +10,8 @@ const logger = pino({ level: process.env.LOG_LEVEL || "info" });
 const app = express();
 
 app.use(express.json());
+const ERROR_CODE = 400;
+
 app.use(
   pinoHttp({
     logger,
@@ -24,6 +26,18 @@ app.use(
     customErrorMessage: (req, res, err) => `request failed : ${err.message}`,
   }),
 );
+
+// Metrics middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const route = req.route ? req.route.path : req.path;
+    httpRequestsTotal.labels(req.method, route, res.statusCode.toString()).inc();
+    httpRequestDurationMs.labels(req.method, route, res.statusCode.toString()).observe(duration);
+  });
+  next();
+});
 
 app.get("/health", (req, res) =>
   res.json({ status: "ok", service: "user-service" }),

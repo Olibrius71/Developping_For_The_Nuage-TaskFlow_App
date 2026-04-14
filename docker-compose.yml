@@ -30,6 +30,9 @@ services:
       - "3001:3001"
     env_file:
       .env
+    environment:
+      OTEL_COLLECTOR_URL: http://otel-collector:4318
+      OTEL_SERVICE_NAME: user-service
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,6 +43,9 @@ services:
       - "3002:3002"
     env_file:
       .env
+    environment:
+      OTEL_COLLECTOR_URL: http://otel-collector:4318
+      OTEL_SERVICE_NAME: task-service
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,6 +58,9 @@ services:
       - "3003:3003"
     env_file:
       .env
+    environment:
+      OTEL_COLLECTOR_URL: http://otel-collector:4318
+      OTEL_SERVICE_NAME: notification-service
     depends_on:
       redis:
         condition: service_healthy
@@ -62,6 +71,9 @@ services:
       - "3000:3000"
     env_file:
       .env
+    environment:
+      OTEL_COLLECTOR_URL: http://otel-collector:4318
+      OTEL_SERVICE_NAME: api-gateway
     depends_on:
       - user-service
       - task-service
@@ -73,6 +85,10 @@ services:
       - "5173:80"
     depends_on:
       - api-gateway
+
+networks:
+  default:
+    name: taskflow-network
 
 volumes:
   postgres_data:
