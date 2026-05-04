@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: user-service-cm
+  name: task-service-cm
   namespace: staging
 data:
-  PORT: "3001"
+  PORT: "3002"
   LOG_LEVEL: "info"
   DATABASE_URL: "postgresql://taskflow:taskflow@postgres:5432/taskflow"
-  JWT_SECRET: "dev-secret"
+  REDIS_URL: "redis://redis:6379"
   OTEL_COLLECTOR_URL: "http://otel-collector:4318"
-  OTEL_SERVICE_NAME: "user-service"
+  OTEL_SERVICE_NAME: "task-service"

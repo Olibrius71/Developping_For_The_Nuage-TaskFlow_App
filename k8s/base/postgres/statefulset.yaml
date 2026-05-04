@@ -1,8 +1,8 @@
 apiVersion: apps/v1
-kind: # [...]
+kind: StatefulSet
 metadata:
   name: postgres
-  namespace: # [...]
+  namespace: staging
 spec:
   serviceName: postgres
   replicas: 1
@@ -19,22 +19,22 @@ spec:
           image: postgres:16-alpine
           envFrom:
             - secretRef:
-                name: # [...]
+                name: postgres-secret
           ports:
             - containerPort: 5432
           readinessProbe:
             exec:
-              command: # [...]
+              command: ["pg_isready", "-U", "taskflow"]
             initialDelaySeconds: 5
             periodSeconds: 5
           volumeMounts:
-            - name: # [...]
+            - name: postgres-data
               mountPath: /var/lib/postgresql/data
   volumeClaimTemplates:
     - metadata:
         name: postgres-data
       spec:
-        accessModes: # [...]
+        accessModes: ["ReadWriteOnce"]
         resources:
           requests:
             storage: 1Gi

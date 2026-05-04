@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-cm
+  namespace: staging
+data:
+  NGINX_PORT: "80"

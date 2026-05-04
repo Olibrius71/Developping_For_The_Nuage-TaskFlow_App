@@ -1,10 +1,10 @@
 apiVersion: apps/v1
-kind: # [...]
+kind: Deployment
 metadata:
   name: redis
-  namespace: # [...]
+  namespace: staging
 spec:
-  replicas: # [...]
+  replicas: 1
   selector:
     matchLabels:
       app: redis
@@ -17,9 +17,12 @@ spec:
         - name: redis
           image: redis:7-alpine
           ports:
-            - containerPort: # [...]
+            - containerPort: 6379
           readinessProbe:
-            # [...]
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 3
+            periodSeconds: 5
           resources:
             requests:
               memory: "32Mi"
