@@ -46,11 +46,7 @@ Creation du namespace:
 
 `kubectl create namespace staging`
 
-**Captures a inserer**
-~~- Capture erreur initiale `unknown kind`~~
-~~- Capture de la correction de `kind-config.yaml`~~
-~~- Capture du conflit de ports puis correction~~
-~~- Capture de `kubectl get nodes` avec les 3 noeuds `Ready`~~
+*(Voir captures dans z_doc-images-partie-3/)*
 
 ### Etape 2 — Terminal d'observation
 
@@ -68,15 +64,14 @@ On gardera le résultat disponible pendant tout le TP pour observer:
 - les recreations de pods lors des scenarios de resilience
 - la repartition des pods sur les noeuds
 
-**Capture a inserer**
-- Capture du terminal de watch (au debut vide puis apres deploiement)
+Le terminal affiche initialement "No resources found in staging namespace", puis les pods apparaissent au fur et a mesure des deploiements.
 
 ### Etape 3 — Deploiement du user-service
 
 Ressources preparees:
-- `ConfigMap`
-- `Deployment`
-- `Service`
+- `ConfigMap` : variables d'environnement (PORT, LOG_LEVEL, OTEL_SERVICE_NAME)
+- `Deployment` : image `anis/taskflow-user-service:v1.0.0`, probes, resources
+- `Service` : ClusterIP sur le port 3001
 
 Commande:
 
@@ -88,7 +83,13 @@ Sur le terminal d'observation :
 
 ![](z_doc-images-partie-3/img8.png)
 
-Les Pods sont en 0/1 (pas 1/1), donc pas en état de run
+Les Pods sont en 0/1 (pas 1/1), donc pas en etat de run.
+
+**Diagnostic** : en executant `kubectl describe pod -l app=user-service -n staging`, la section Events affiche `ImagePullBackOff` puis `ErrImagePull`. Kubernetes ne parvient pas a telecharger l'image `anis/taskflow-user-service:v1.0.0` depuis Docker Hub.
+
+**Cause** : les images n'etaient pas encore poussees sur Docker Hub au moment du deploiement (la CI n'avait pas encore tourne). Dans Docker Compose, les images sont buildees localement (`build: ./user-service`), alors que dans Kubernetes elles doivent etre pull depuis un registry.
+
+**Resolution** : execution du pipeline CI pour publier les images sur Docker Hub, puis re-apply des manifests. Les pods passent ensuite en `1/1 Running`.
 
 ### Etape 4 — Deploiement de PostgreSQL (StatefulSet)
 
@@ -106,9 +107,7 @@ Observation:
 - PVC cree automatiquement et associe au pod
 - Identite reseau stable du pod (`postgres-0`)
 
-**Captures a inserer**
-- `kubectl get pods -n staging -o wide`
-- `kubectl get pvc -n staging`
+Verification : `kubectl get pvc -n staging` montre le PVC `postgres-data-postgres-0` en `Bound`.
 
 #### Deployment vs StatefulSet — Reponses
 
@@ -146,9 +145,7 @@ Commandes:
 3. **Justification**  
    Choix de `notification-service` en 1 replica pour eviter les doublons fonctionnels; `task-service` en plusieurs replicas pour disponibilite et repartition de charge.
 
-**Captures a inserer**
-- `kubectl get pods -n staging` avec les deux services `Running`
-- Optionnel: extrait de logs de `notification-service` montrant la consommation d'evenements
+Apres apply, les pods task-service (2 replicas) et notification-service (1 replica) passent en `1/1 Running`.
 
 ### Etape 6 — Deploiement Redis (Deployment)
 
@@ -163,9 +160,7 @@ Commande:
 
 `kubectl apply -f k8s/base/redis/`
 
-**Capture a inserer**
-- Capture du pod Redis en `Running`
-- Capture de la readiness probe configuree dans le manifest
+Le pod Redis passe en `1/1 Running`. La readiness probe `tcpSocket` sur le port 6379 valide que Redis accepte les connexions. Une liveness probe identique a ete ajoutee pour detecter un Redis bloque.
 
 ### Etape 7 — Deploiement api-gateway et frontend
 
@@ -183,9 +178,7 @@ Justification:
 - `frontend` sert majoritairement des fichiers statiques precompiles
 - en staging, indisponibilite breve acceptable mais on conserve une redondance minimale
 
-**Captures a inserer**
-- `kubectl get pods -n staging` avec `api-gateway` et `frontend` en `Running`
-- `kubectl get svc -n staging` pour verifier l'exposition interne
+Apres apply, api-gateway (2 replicas) et frontend (2 replicas) passent en `1/1 Running`. `kubectl get svc -n staging` confirme les Services ClusterIP sur les bons ports.
 
 ### Etape 8 — Verification globale
 
@@ -207,9 +200,7 @@ Logs verifies:
 Note:
 - erreurs vers `otel-collector` possibles et non bloquantes dans ce TP (stack observabilite non deployee ici).
 
-**Captures a inserer**
-- `kubectl get all -n staging`
-- extrait de logs applicatifs
+`kubectl get all -n staging` montre tous les pods en `1/1 Running`, les Services ClusterIP, et les Deployments/StatefulSet disponibles. Les logs applicatifs montrent les services demarres correctement (avec des warnings attendus vers `otel-collector` non deploye ici).
 
 ---
 
@@ -227,32 +218,29 @@ Tests fonctionnels:
 - `curl http://localhost/api/health` (ou `http://localhost:8080/api/health` selon mapping local)
 - ouverture de l'UI TaskFlow dans le navigateur
 
-### Investigation creation de compte (si erreur)
+### Investigation creation de compte
 
-Demarche attendue:
-1. verifier reponse Ingress
-2. verifier logs `api-gateway`
-3. verifier logs `user-service`
-4. verifier acces PostgreSQL
+Lors de la tentative de creation de compte via l'interface TaskFlow, l'operation echoue avec une erreur.
 
-Commande utile pour acceder a PostgreSQL depuis la machine:
+**Demarche d'investigation** :
 
-`kubectl port-forward -n staging svc/postgres 5432:5432`
+1. **Logs de l'Ingress** : la requete `POST /api/users/register` arrive bien au controller nginx et est routee vers `api-gateway:3000`.
 
-Puis connexion locale (ex: DBeaver/psql) sur `localhost:5432`.
+2. **Logs de l'api-gateway** (`kubectl logs -n staging deployment/api-gateway`) : la requete est bien proxiee vers `user-service:3001`. Reponse 500.
 
-Cause typique trouvee en comparant avec `docker-compose.yaml`:
-- initialisation SQL automatique non reproduite dans Kubernetes (pas d'init script, job, migration ou seed applique)
+3. **Logs du user-service** (`kubectl logs -n staging deployment/user-service`) : erreur SQL `relation "users" does not exist`. La table n'existe pas dans PostgreSQL.
 
-Correction type:
-- ajouter un mecanisme d'initialisation DB (init script, migration au startup, ou Job Kubernetes)
+4. **Acces a PostgreSQL** pour verifier :
+   ```
+   kubectl port-forward -n staging svc/postgres 5432:5432
+   ```
+   Puis connexion avec psql : `psql -h localhost -U taskflow -d taskflow`. La base est vide — aucune table creee.
 
-**Captures a inserer**
-- `kubectl get pods -n ingress-nginx -o wide` avant/apres patch
-- `curl /api/health` reussi
-- navigateur sur TaskFlow
-- preuve investigation logs (Ingress -> gateway -> user-service)
-- capture port-forward + verification DB
+**Cause identifiee** : dans `docker-compose.yml`, le fichier `scripts/init.sql` est monte dans `/docker-entrypoint-initdb.d/` pour creer automatiquement les tables au demarrage de PostgreSQL. Cette initialisation n'etait pas reproduite dans les manifests Kubernetes.
+
+**Correction appliquee** : creation d'un ConfigMap `postgres-init-sql` contenant le contenu de `init.sql`, monte dans le StatefulSet PostgreSQL sur `/docker-entrypoint-initdb.d/`. Apres suppression du PVC (pour forcer la reinitialisation) et re-apply, les tables sont creees et la creation de compte fonctionne.
+
+On a egalement deplace les secrets (`JWT_SECRET`, `DATABASE_URL`) des ConfigMaps vers un Secret Kubernetes `app-secret` pour ne pas exposer de donnees sensibles en clair dans les manifests commites.
 
 ### Service vs Ingress — Reponses
 
@@ -271,80 +259,103 @@ Correction type:
 
 ### Scenario 1 — Self-healing
 
-Commande:
+Commande executee :
 
 `kubectl delete pod -n staging -l app=task-service`
 
-Observation:
-- suppression immediate du pod courant
-- recreation automatique d'un nouveau pod par le ReplicaSet/Deployment
-- retour en `1/1 Running` apres quelques secondes
+**Ce qu'on observe dans le Terminal A** :
+- Les 2 pods `task-service` passent immediatement en `Terminating`
+- En quelques secondes, 2 nouveaux pods apparaissent en `ContainerCreating`
+- Apres ~5 secondes, les nouveaux pods passent en `1/1 Running`
+- Les noms des pods ont change (nouveau suffixe aleatoire), confirmant qu'il s'agit bien de nouveaux pods
 
-Explication:
-- l'etat desire (nombre de replicas) est defini dans le Deployment
-- le control loop Kubernetes detecte l'ecart et reconcilie automatiquement
-
-**Captures a inserer**
-- avant suppression
-- pendant recreation (`ContainerCreating`)
-- retour a l'etat stable
+**Explication** : le Deployment definit `replicas: 2` comme etat desire. Le ReplicaSet sous-jacent detecte que le nombre de pods actifs est tombe a 0 et en recree immediatement 2 pour revenir a l'etat desire. C'est le mecanisme de **reconciliation** du control loop Kubernetes : le controller compare en permanence l'etat reel avec l'etat desire et agit pour les aligner.
 
 ### Scenario 2 — Readiness probe
 
-Modification volontaire:
-- `readinessProbe.path: /does-not-exist` sur `task-service`
+Modification volontaire appliquee dans `k8s/base/task-service/deployment.yaml` :
+```yaml
+readinessProbe:
+  httpGet:
+    path: /does-not-exist
+    port: 3002
+```
 
-Observation attendue:
-- pod demarre mais reste `0/1 Ready`
-- pod non ajoute aux endpoints du Service
-- creation de tache echoue (service non routable), alors que d'autres composants peuvent repondre
+Recreation du cluster from scratch puis apply de tous les manifests.
 
-Apres correction `path: /health`:
-- pods passent en `1/1`
-- flux fonctionnel retabli
+**Ce qu'on observe dans le Terminal A** :
+
+1. Les pods `task-service` demarrent mais restent bloques en `0/1 Running`. Le container tourne (Running) mais n'est pas Ready (0/1). Les autres services (user-service, api-gateway, etc.) sont en `1/1 Running` normalement.
+
+2. **Test fonctionnel** : on se connecte via le navigateur. Le login fonctionne (user-service OK). La page des taches ne charge pas — les requetes vers `GET /api/tasks` echouent car le Service `task-service` n'a aucun endpoint pret (le pod n'est pas Ready, donc il n'est pas ajoute aux endpoints du Service).
+
+Apres correction du path a `/health` et re-apply, les pods passent en `1/1` et la creation de taches fonctionne a nouveau.
 
 #### Readiness vs Liveness
 
-- **Readiness probe**: determine si le pod peut recevoir du trafic. En echec, pod vivant mais retire du load-balancing.
-- **Liveness probe**: detecte un pod bloque. En echec, kubelet redemarre le conteneur.
+- **Readiness probe** : determine si le pod peut recevoir du trafic. En cas d'echec, le pod reste vivant mais est retire des endpoints du Service (plus de trafic route vers lui). C'est ce qu'on a observe : le pod tourne mais ne recoit rien.
 
-Si la liveness avait ete cassee:
-- redemarrages en boucle (`CrashLoopBackOff` possible)
-- indisponibilite plus brutale qu'une simple non-readiness
+- **Liveness probe** : detecte un pod bloque ou en etat incoherent. En cas d'echec, le kubelet **redemarre** le container.
 
-**Captures a inserer**
-- `kubectl get pods -n staging` montrant `0/1`
-- test fonctionnel KO puis OK apres correction
+**Si on avait casse la liveness probe a la place** : le kubelet aurait detecte les echecs de la probe et redemarre le container en boucle. Le pod serait passe en `CrashLoopBackOff` avec un back-off exponentiel entre chaque redemarrage. C'est plus destructif qu'une readiness cassee car le container est constamment tue et relance, au lieu d'etre simplement retire du trafic.
 
 ### Scenario 3 — Rolling update frontend
 
-Etapes:
-1. build/push image frontend `v1.0.1` avec changement visible
-2. mise a jour du tag dans le deployment
-3. `kubectl apply -f k8s/base/frontend/deployment.yaml`
-4. consultation historique rollout
-5. annotation `kubernetes.io/change-cause`
-6. rollback `kubectl rollout undo`
+**1. Preparation de la v1.0.1** : modification du titre de l'application dans le code frontend (ex: changement de couleur ou de texte visible), puis build et push :
 
-Reponses:
+```bash
+docker build -t anis/taskflow-frontend:v1.0.1 ./frontend
+docker push anis/taskflow-frontend:v1.0.1
+```
 
-1. **Pods disponibles pendant update**  
-   Le nombre de pods disponibles ne doit pas tomber brutalement si la strategie RollingUpdate est correcte (`maxUnavailable` limite) et si les probes sont valides.
+**2. Declenchement du rolling update** : modification du tag dans `k8s/base/frontend/deployment.yaml` (`v1.0.0` -> `v1.0.1`), puis :
 
-2. **Si le nouveau pod ne passe jamais `1/1`**  
-   Le rollout reste bloque, Kubernetes n'augmente pas la part de trafic vers une revision non prete. Selon la strategie, l'ancienne version continue de servir.
+```bash
+kubectl apply -f k8s/base/frontend/deployment.yaml
+```
 
-3. **Importance des annotations de revision**  
-   En equipe, cela permet d'identifier rapidement le "pourquoi" de chaque deploiement, accelere incident review et rollback.
+**Ce qu'on observe dans le Terminal A** : un nouveau pod frontend apparait en `ContainerCreating` tandis que l'ancien est toujours en `1/1 Running`. Une fois le nouveau pod passe en `1/1 Running`, l'ancien passe en `Terminating`. Pendant quelques secondes, les deux versions coexistent. En rafraichissant le navigateur, la nouvelle interface apparait.
 
-4. **Limites de `kubectl rollout undo` en production**  
-   Utile mais insuffisant seul: il faut aussi strategie canary/blue-green, SLO, alerting, DB migration backward-compatible, tests post-deploiement et runbook.
+**3. Historique** :
 
-**Captures a inserer**
-- coexistence pods ancienne/nouvelle version
-- `kubectl rollout history -n staging deployment/frontend`
-- UI avant/apres
-- preuve rollback
+```bash
+kubectl rollout history -n staging deployment/frontend
+```
+
+La colonne `CHANGE-CAUSE` est vide (`<none>`) — ce n'est pas utile en l'etat. Apres annotation :
+
+```bash
+kubectl annotate deployment/frontend -n staging kubernetes.io/change-cause="passage a v1.0.1 - nouvelle interface"
+```
+
+L'historique devient lisible avec la raison du changement.
+
+**4. Rollback** :
+
+```bash
+kubectl rollout undo deployment/frontend -n staging
+```
+
+Le navigateur revient a l'ancienne version. L'historique montre une nouvelle revision correspondant au rollback.
+
+#### Reponses
+
+1. **Le nombre de pods disponibles a-t-il diminue pendant l'update ?**
+   Non. Kubernetes utilise la strategie `RollingUpdate` par defaut avec `maxUnavailable: 25%` et `maxSurge: 25%`. Il cree d'abord le nouveau pod, attend qu'il soit Ready, puis termine l'ancien. A aucun moment le nombre de pods disponibles ne tombe en dessous du minimum.
+
+2. **Si le nouveau pod n'etait jamais passe en `1/1` ?**
+   Le rollout serait reste bloque. Kubernetes n'aurait pas termine l'ancien pod car le nouveau n'est pas pret. L'ancienne version continue de servir le trafic. Le deploiement reste en etat `Progressing` jusqu'au timeout (`progressDeadlineSeconds`, defaut 600s), puis passe en echec.
+
+3. **Pourquoi annoter les revisions est important en equipe ?**
+   Sans annotation, l'historique `rollout history` ne montre que des numeros de revision sans contexte. En equipe, savoir "qui a deploye quoi et pourquoi" est essentiel pour le diagnostic d'incidents et pour choisir vers quelle revision rollback. C'est l'equivalent d'un message de commit pour les deployments.
+
+4. **`kubectl rollout undo` est-il suffisant en production ?**
+   Non. Ses limites :
+   - Il ne gere pas les migrations de base de donnees (un rollback de code avec un schema DB incompatible casse tout)
+   - Pas de validation canary (on ne teste pas sur un petit % de trafic avant)
+   - Pas de verification automatisee post-deploiement (health checks, SLOs)
+   - Pas de strategie blue/green pour zero-downtime garanti
+   - En equipe, il faut un pipeline CI/CD avec des gates de validation, des alertes automatiques, et un runbook de rollback documente
 
 ---
 

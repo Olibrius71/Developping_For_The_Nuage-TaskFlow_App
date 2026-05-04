@@ -6,7 +6,6 @@ metadata:
 data:
   PORT: "3002"
   LOG_LEVEL: "info"
-  DATABASE_URL: "postgresql://taskflow:taskflow@postgres:5432/taskflow"
   REDIS_URL: "redis://redis:6379"
   OTEL_COLLECTOR_URL: "http://otel-collector:4318"
   OTEL_SERVICE_NAME: "task-service"

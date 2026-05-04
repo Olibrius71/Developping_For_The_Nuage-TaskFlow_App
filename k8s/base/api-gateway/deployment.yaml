@@ -20,6 +20,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: api-gateway-cm
+            - secretRef:
+                name: app-secret
           ports:
             - containerPort: 3000
           readinessProbe:

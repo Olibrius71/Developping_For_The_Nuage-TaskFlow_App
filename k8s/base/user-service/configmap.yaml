@@ -6,7 +6,5 @@ metadata:
 data:
   PORT: "3001"
   LOG_LEVEL: "info"
-  DATABASE_URL: "postgresql://taskflow:taskflow@postgres:5432/taskflow"
-  JWT_SECRET: "dev-secret"
   OTEL_COLLECTOR_URL: "http://otel-collector:4318"
   OTEL_SERVICE_NAME: "user-service"

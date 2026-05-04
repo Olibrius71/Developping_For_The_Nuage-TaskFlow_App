@@ -20,6 +20,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: task-service-cm
+            - secretRef:
+                name: app-secret
           ports:
             - containerPort: 3002
           readinessProbe:

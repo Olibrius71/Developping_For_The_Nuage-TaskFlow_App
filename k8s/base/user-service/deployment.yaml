@@ -20,6 +20,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: user-service-cm
+            - secretRef:
+                name: app-secret
           ports:
             - containerPort: 3001
           readinessProbe:

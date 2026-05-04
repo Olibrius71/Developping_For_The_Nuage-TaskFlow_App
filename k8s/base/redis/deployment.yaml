@@ -23,6 +23,11 @@ spec:
               port: 6379
             initialDelaySeconds: 3
             periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 10
+            periodSeconds: 10
           resources:
             requests:
               memory: "32Mi"
