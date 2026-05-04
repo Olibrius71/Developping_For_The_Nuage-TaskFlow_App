@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: # [...]
+metadata:
+  name: user-service
+  namespace: # [...]
+spec:
+  selector:
+    app: user-service
+  ports:
+    # [...]

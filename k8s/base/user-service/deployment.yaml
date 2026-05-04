@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: # [...]
+metadata:
+  name: user-service
+  namespace: # [...]
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      # [...]
+      containers:
+        - name: user-service
+          # [...]
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"

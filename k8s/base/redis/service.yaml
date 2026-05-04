@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: # [...]
+metadata:
+  name: redis
+  namespace: # [...]
+spec:
+  selector:
+    app: redis
+  ports:
+    # [...]

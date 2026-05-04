@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: # [...]
+metadata:
+  name: postgres
+  namespace: # [...]
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          envFrom:
+            - secretRef:
+                name: # [...]
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: # [...]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: # [...]
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: # [...]
+        resources:
+          requests:
+            storage: 1Gi
