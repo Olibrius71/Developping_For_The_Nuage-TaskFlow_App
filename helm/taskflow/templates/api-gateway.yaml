@@ -1,62 +1,66 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: user-service
+  name: api-gateway
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: {{ .Values.userService.replicaCount }}
+  replicas: {{ .Values.apiGateway.replicaCount }}
   selector:
     matchLabels:
-      app: user-service
+      app: api-gateway
   template:
     metadata:
       labels:
-        app: user-service
+        app: api-gateway
     spec:
       containers:
-        - name: user-service
-          image: "{{ .Values.image.prefix }}-user-service:{{ .Values.userService.tag }}"
+        - name: api-gateway
+          image: "{{ .Values.image.prefix }}-api-gateway:{{ .Values.apiGateway.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: PORT
-              value: "3001"
+              value: "3000"
             - name: LOG_LEVEL
               value: "info"
-            - name: DATABASE_URL
-              value: "postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@postgres:5432/{{ .Values.postgres.db }}"
             - name: JWT_SECRET
               value: {{ .Values.jwt.secret | quote }}
+            - name: USER_SERVICE_URL
+              value: http://user-service:3001
+            - name: TASK_SERVICE_URL
+              value: http://task-service:3002
+            - name: NOTIFICATION_SERVICE_URL
+              value: http://notification-service:3003
             - name: OTEL_SERVICE_NAME
-              value: user-service
+              value: api-gateway
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.otel.endpoint | quote }}
             - name: OTEL_COLLECTOR_URL
               value: {{ .Values.otel.endpoint | quote }}
           ports:
-            - containerPort: 3001
+            - containerPort: 3000
           readinessProbe:
             httpGet:
               path: /health
-              port: 3001
+              port: 3000
             initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
             httpGet:
               path: /health
-              port: 3001
+              port: 3000
             initialDelaySeconds: 10
             periodSeconds: 10
           resources:
-            {{- toYaml .Values.userService.resources | nindent 12 }}
+            {{- toYaml .Values.apiGateway.resources | nindent 12 }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: user-service
+  name: api-gateway
   namespace: {{ .Release.Namespace }}
 spec:
   selector:
-    app: user-service
+    app: api-gateway
   ports:
-    - port: 3001
-      targetPort: 3001
+    - port: 3000
+      targetPort: 3000

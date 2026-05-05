@@ -1,9 +1,16 @@
-# Production : images figées, secrets forts, plus de replicas, plus de ressources
+# Production : images figees, plus de replicas, plus de ressources
+# IMPORTANT: les valeurs sensibles (postgres.password, jwt.secret) NE SONT PAS dans ce fichier.
+# Elles sont passees a l'install via --set ou un fichier values-secrets.yaml non commite (.gitignore).
+# Exemple : helm upgrade --install taskflow ./helm/taskflow \
+#            --values values.yaml \
+#            --values values.production.yaml \
+#            --set postgres.password=$POSTGRES_PASSWORD \
+#            --set jwt.secret=$JWT_SECRET
+
 image:
   pullPolicy: Always
 
 postgres:
-  password: REMPLACER_PAR_MOT_DE_PASSE_FORT
   db: taskflow_prod
   storageSize: 10Gi
 
