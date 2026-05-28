@@ -52,9 +52,12 @@ kind: Service
 metadata:
   name: notification-service
   namespace: {{ .Release.Namespace }}
+  labels:
+    app: notification-service
 spec:
   selector:
     app: notification-service
   ports:
-    - port: 3003
+    - name: http
+      port: 3003
       targetPort: 3003

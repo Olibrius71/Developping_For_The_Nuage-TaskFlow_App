@@ -39,6 +39,11 @@ frontend:
 taskService:
   replicaCount: 2
   tag: v1.0.0
+  hpa:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPU: 70
   resources:
     requests:
       memory: "128Mi"
@@ -48,7 +53,7 @@ taskService:
       cpu: "200m"
 
 notificationService:
-  replicaCount: 2
+  replicaCount: 1
   tag: v1.0.0
   resources:
     requests:

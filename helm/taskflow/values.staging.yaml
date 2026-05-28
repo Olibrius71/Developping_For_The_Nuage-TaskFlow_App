@@ -1,0 +1,16 @@
+# Staging : valeurs pour le cluster kind local
+# Les secrets (postgres.password, jwt.secret) heritent des defauts dev de values.yaml.
+# En production ils seraient passes via --set (cf values.production.yaml).
+
+image:
+  pullPolicy: IfNotPresent
+
+# HPA desactive en staging : sur kind les ressources du noeud sont partagees,
+# ajouter des pods ne fait qu'augmenter la contention. Le HPA n'a de sens
+# que sur un vrai cluster cloud a noeuds elastiques (cf values.production.yaml).
+taskService:
+  hpa:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPU: 70

@@ -1,0 +1,15 @@
+# Valeurs par defaut du chart monitoring.
+# Les valeurs reelles sont fournies via -f values.monitoring.yaml et -f values.monitoring.secret.yaml.
+
+# Valeurs propres a notre chart (utilisees par templates/alertmanager-config.yaml)
+alertmanagerConfig:
+  smtp:
+    host: ""
+    from: ""
+    username: ""
+    password: ""
+    to: ""
+
+# Seuils des regles d'alerte (templates/alerts.yaml)
+alertThresholds:
+  p95Ms: 500   # seuil production. Abaissable via --set pour les tests de la chaine d'alerte.

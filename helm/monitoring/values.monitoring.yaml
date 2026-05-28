@@ -1,18 +1,32 @@
-grafana:
-  sidecar:
-    dashboards:
-      enabled: true       # activate automatic loading of dashboards via ConfigMap
-      label: grafana_dashboard
-  grafana.ini:
-    server:
-      root_url: "http://localhost:3100"
-      serve_from_sub_path: true
+# Valeurs pour le chart local "monitoring".
+# kube-prometheus-stack etant une DEPENDANCE, ses valeurs sont imbriquees sous sa cle.
+# Les valeurs propres a notre chart (alertmanagerConfig) restent au top-level.
 
-prometheus:
-  prometheusSpec:
-    retention: 7d
-    resources:
-      requests:
-        memory: "512Mi"
-      limits:
-        memory: "1Gi"
+kube-prometheus-stack:
+  grafana:
+    sidecar:
+      dashboards:
+        enabled: true            # chargement auto des dashboards via ConfigMap
+        label: grafana_dashboard # label que la sidecar surveille
+    grafana.ini:
+      server:
+        root_url: "http://localhost:3100"
+
+  prometheus:
+    prometheusSpec:
+      retention: 7d
+      resources:
+        requests:
+          memory: "512Mi"
+        limits:
+          memory: "1Gi"
+      # Permet a Prometheus de decouvrir les ServiceMonitor hors de son namespace
+      serviceMonitorNamespaceSelector: {}
+      serviceMonitorSelector:
+        matchLabels:
+          release: monitoring
+
+  alertmanager:
+    alertmanagerSpec:
+      # Notre Secret de config Alertmanager (templates/alertmanager-config.yaml)
+      configSecret: taskflow-alertmanager-config

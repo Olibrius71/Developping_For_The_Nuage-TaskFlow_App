@@ -29,6 +29,11 @@ userService:
 
 taskService:
   replicaCount: 3
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPU: 70
   resources:
     requests:
       memory: "256Mi"

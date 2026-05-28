@@ -2,7 +2,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: taskflow-alerts
-  namespace: monitoring
+  namespace: {{ .Release.Namespace }}
   labels:
     release: monitoring
 spec:
@@ -10,4 +10,19 @@ spec:
     - name: taskflow
       rules:
         - alert: ServiceDown
-          # [...]
+          expr: up{job=~"api-gateway|task-service|user-service|notification-service"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Service {{ `{{ $labels.job }}` }} indisponible"
+            description: "{{ `{{ $labels.job }}` }} ne repond plus depuis plus d'une minute."
+
+        - alert: HighP95Latency
+          expr: histogram_quantile(0.95, sum(rate(http_request_duration_ms_bucket{job="task-service"}[1m])) by (le)) > {{ .Values.alertThresholds.p95Ms | default 500 }}
+          for: 30s
+          labels:
+            severity: warning
+          annotations:
+            summary: "Latence P95 elevee sur task-service"
+            description: "La latence P95 du task-service depasse {{ .Values.alertThresholds.p95Ms | default 500 }}ms sur la derniere minute (valeur actuelle : {{ `{{ $value | humanize }}` }}ms)."
