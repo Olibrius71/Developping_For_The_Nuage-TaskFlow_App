@@ -24,7 +24,10 @@ La note finale est calculée sur **100 points**.
 | Application accessible via Ingress | Le frontend est accessible sur `http://localhost`, l'API répond sur `/api/health`, et la création de compte fonctionne |
 | Infrastructure reproductible | La stack peut être lancée sur une machine externe en suivant uniquement le README |
 | Stabilité | La stack fonctionne de manière reproductible sans manipulation imprévue |
-| Chart Helm opérationnel | `helm upgrade --install` réussit sans erreur, tous les Pods passent en `1/1 Running` dans le namespace `staging` via Helm |
+| Chart Helm taskflow et monitoring opérationnels | `helm upgrade --install` sur `./helm/monitoring` et `./helm/taskflow` réussit sans erreur, tous les Pods passent en `1/1 Running` |
+| TaskFlow connecté à Prometheus | Les cibles TaskFlow apparaissent dans Prometheus (`/targets`) via les `ServiceMonitor` — les métriques des services sont scrapées |
+| Alerte `HighP95Latency` opérationnelle | La règle `PrometheusRule` est chargée (`/rules` en état `OK`) et passe en `firing` lors du test de charge |
+| HPA actif | Le `HorizontalPodAutoscaler` est présent dans le namespace `staging`, `kubectl get hpa` affiche les métriques cibles |
 
 ---
 
@@ -33,14 +36,16 @@ La note finale est calculée sur **100 points**.
 | Critère | Description |
 |---|---|
 | Qualité des logs | Les logs sont structurés, exploitables, et les niveaux sont utilisés de façon cohérente |
-| Pertinence des métriques | Les métriques ajoutées permettent d'observer efficacement le comportement de l'application |
 | Pipeline d'observabilité | Les données transitent correctement de l'application jusqu'à Grafana |
 | Dashboards | Les dashboards Grafana sont lisibles, pertinents et versionnés dans le repo |
-| Traces distribuées | Les traces couvrent plusieurs services et incluent des spans custom là où c'est justifié |
 | Complétude des manifests | Tous les services sont couverts : postgres, redis, user-service, task-service, notification-service, api-gateway, frontend, ingress |
 | Configuration de l'Ingress | Les routes sont correctement définies et fonctionnelles |
 | Complétude du chart Helm | Tous les services sont couverts dans les templates Helm, la dépendance Redis Bitnami est correctement déclarée dans `Chart.yaml` et téléchargée |
 | Gestion des valeurs et des secrets | `values.yaml` et `values.production.yaml` présents et bien structurés — aucun secret en clair dans les fichiers committés, les valeurs sensibles sont passées séparément au déploiement |
+| Configuration Alertmanager | La règle d'alerte est correctement exprimée et cohérente avec les métriques exposées par l'application et la configuration de notification est gérée via Helm |
+| HPA dans le chart | Le HPA et le champ `replicas` sont correctement conditionnels — aucun conflit entre Helm et le HPA à l'exécution |
+| Cloisonnement staging / production | Cloisonnement staging / production | La configuration du HPA est adaptée à chaque environnement via les fichiers de valeurs dédiés |
+
 
 ---
 
@@ -51,6 +56,8 @@ La note finale est calculée sur **100 points**.
 | Notice d'installation | Instructions claires pour lancer l'ensemble de la stack (observabilité et Kubernetes) étape par étape |
 | Guide d'observation | Étapes permettant d'observer les comportements dans Grafana — comment retrouver une trace, filtrer des logs, lire un dashboard |
 | Guide de déploiement Helm | Instructions claires pour installer le chart (`helm dependency update`, `helm upgrade --install`), passer les secrets au déploiement, et vérifier l'état de la release |
+| Guide du chart monitoring | Instructions pour installer `helm/monitoring` : `helm dependency update`, passage des deux fichiers de valeurs (`-f values.monitoring.yaml -f values.monitoring.secret.yaml`), vérification des cibles Prometheus et des dashboards dans Grafana |
+| Guide des alertes | Instructions pour vérifier la règle sur `/rules`, accéder à Alertmanager via `port-forward`, et interpréter les timings (`for`, `group_wait`) |
 
 ---
 
@@ -62,7 +69,6 @@ La note finale est calculée sur **100 points**.
 | Observations et preuves | Les conclusions sont étayées par des preuves concrètes — captures Grafana, captures terminal, chiffres précis — pas d'affirmations sans justification |
 | Analyse des résultats | Les comportements observés sont interprétés, mis en perspective, et les limites des outils sont identifiées quand elles sont pertinentes |
 | Justification des choix | Les décisions de configuration prises sont expliquées et cohérentes |
-| Scénarios d'observation Kubernetes | Documentés avec des observations concrètes et une analyse de ce que chaque comportement révèle |
 
 ---
 
@@ -73,7 +79,9 @@ La note finale est calculée sur **100 points**.
 | Qualité du code d'observabilité | Tout le code relevant de l'observabilité est lisible et cohérent — logs dans les routes et middlewares, `tracing.js`, `metrics.js`, endpoint `/metrics`, configs infra — sans gestion d'erreurs silencieuse |
 | Qualité des manifests Kubernetes | Les manifests sont lisibles, sans duplication inutile, et organisés dans une arborescence cohérente sous `k8s/base/` |
 | Organisation Git | Les commits sont atomiques et les messages clairs |
-| Qualité du chart Helm | Les templates sont lisibles et cohérents, `values.yaml` est complet, l'arborescence `helm/taskflow/` est propre et versionnée |
+| Qualité du chart Helm | Les templates sont lisibles et cohérents, les fichiers `values.yaml` sont complets, l'arborescence `helm/taskflow/` et `helm/monitoring/` sont propre et versionnées, `chart.yaml` avec dépendance déclarée |
+| Absence de secrets committés (monitoring) | `values.monitoring.secret.yaml` absent du repo, présence d'un fichier `.example` ou d'une mention explicite dans le README |
+
 
 ---
 
@@ -87,7 +95,7 @@ La note finale est calculée sur **100 points**.
 | Application inaccessible via Ingress | -10 |
 | README absent ou incomplet | -15 |
 | Fichiers sensibles committés (.env, tokens, secrets) | -30 |
-| Chart Helm impossible à installer | -15 |
+| Charts Helm (taskflow et monitoring) impossible à installer | -15 |
 
 ---
 
