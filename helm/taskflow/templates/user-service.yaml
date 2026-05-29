@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: user-service
-          image: "{{ .Values.image.prefix }}-user-service:{{ .Values.userService.tag }}"
+          image: "{{ .Values.image.prefix }}-user-service:{{ .Values.userService.tag | default .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: PORT

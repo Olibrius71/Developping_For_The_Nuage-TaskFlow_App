@@ -7,6 +7,7 @@
 # GitHub prerequisites:
 #   - Secret DOCKERHUB_USERNAME / DOCKERHUB_TOKEN
 #   - Secret POSTGRES_PASSWORD_PROD  (production only)
+#   - Secret SMTP_HOST / SMTP_FROM / SMTP_USERNAME / SMTP_PASSWORD / SMTP_TO (production only)
 #   - Environment "staging"    (no protection rule needed)
 #   - Environment "production" (protection: manual approval required)
 
@@ -25,8 +26,10 @@ on:
         default: ""
 
 # IMAGE_TAG: SHA from CI build, or manually provided tag, or 'latest' as fallback
+# IMAGE_PREFIX: aligned with the CI (<dockerhub-user>/taskflow)
 env:
   IMAGE_TAG: ${{ inputs.image_tag || github.event.workflow_run.head_sha || 'latest' }}
+  IMAGE_PREFIX: ${{ secrets.DOCKERHUB_USERNAME }}/taskflow
 
 # ─────────────────────────────────────────────────────────────────────────────
 # VALIDATE — Lint + template rendering, no cluster required
@@ -35,7 +38,9 @@ jobs:
   validate:
     name: "Validate Helm Charts"
     runs-on: ubuntu-latest
-    # TODO: Only run validation if triggered manually OR if CI build succeeded (avoid redundant runs on failed builds)
+    # Only run validation if triggered manually OR if the CI build succeeded
+    # (avoids redundant runs when the CI build failed).
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
 
     steps:
       - uses: actions/checkout@v4
@@ -43,31 +48,69 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
 
+      # MISSING STEP: the monitoring chart depends on kube-prometheus-stack and the
+      # taskflow chart depends on bitnami/redis. Without resolving these dependencies,
+      # every `helm lint`/`helm template`/`helm upgrade` fails ("missing in charts/").
+      - name: Update Helm dependencies
+        run: |
+          helm dependency update ./helm/monitoring
+          helm dependency update ./helm/taskflow
+
       - name: Lint — monitoring
-        # In CI, we deploy a simplified monitoring stack 
+        # In CI, we deploy a simplified monitoring stack
         # → use values.ci to disable heavy components and avoid lint errors from missing SMTP secrets (alertmanager disabled)
-        run: #[...]
+        run: |
+          helm lint ./helm/monitoring \
+            --namespace monitoring \
+            -f helm/monitoring/values.monitoring.yaml \
+            -f helm/monitoring/values.ci.yaml
 
       - name: Lint — taskflow (staging)
-        # For taskflow, we want to validate both staging and production values since they have different configurations 
+        # For taskflow, we want to validate both staging and production values since they have different configurations
         # (e.g. replica count, resource requests, secrets)
-        run: #[...]
+        run: |
+          helm lint ./helm/taskflow \
+            --namespace staging \
+            -f helm/taskflow/values.yaml \
+            -f helm/taskflow/values.staging.yaml
 
       - name: Lint — taskflow (production)
         # For production, set a placeholder postgres.password to avoid lint errors
-        run: #[...]
+        run: |
+          helm lint ./helm/taskflow \
+            --namespace production \
+            -f helm/taskflow/values.yaml \
+            -f helm/taskflow/values.production.yaml \
+            --set postgres.password=placeholder
 
       - name: Template — monitoring (dry-run rendering)
         # Use values.ci to disable heavy components and avoid rendering errors from missing SMTP secrets (alertmanager disabled)
-        run: #[...]
+        run: |
+          helm template monitoring ./helm/monitoring \
+            --namespace monitoring \
+            -f helm/monitoring/values.monitoring.yaml \
+            -f helm/monitoring/values.ci.yaml
 
       - name: Template — taskflow staging (dry-run rendering)
         # For staging and production, do not forget to set the image.tag from the env variable (CI build SHA or manual input)
-        run: #[...]
+        run: |
+          helm template taskflow ./helm/taskflow \
+            --namespace staging \
+            -f helm/taskflow/values.yaml \
+            -f helm/taskflow/values.staging.yaml \
+            --set image.prefix=${{ env.IMAGE_PREFIX }} \
+            --set image.tag=${{ env.IMAGE_TAG }}
 
       - name: Template — taskflow production (dry-run rendering)
         # For staging and production, do not forget to set the image.tag from the env variable (CI build SHA or manual input)
-        run: #[...]
+        run: |
+          helm template taskflow ./helm/taskflow \
+            --namespace production \
+            -f helm/taskflow/values.yaml \
+            -f helm/taskflow/values.production.yaml \
+            --set postgres.password=placeholder \
+            --set image.prefix=${{ env.IMAGE_PREFIX }} \
+            --set image.tag=${{ env.IMAGE_TAG }}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -90,9 +133,22 @@ jobs:
         with:
           cluster_name: staging
 
+      # MISSING STEP: resolve chart dependencies before any helm install
+      - name: Update Helm dependencies
+        run: |
+          helm dependency update ./helm/monitoring
+          helm dependency update ./helm/taskflow
+
       # Monitoring stack (Prometheus only in CI, grafana/alertmanager disabled)
       - name: Deploy monitoring stack
-        run: #[...]
+        run: |
+          helm upgrade --install monitoring ./helm/monitoring \
+            --namespace monitoring \
+            --create-namespace \
+            -f helm/monitoring/values.monitoring.yaml \
+            -f helm/monitoring/values.ci.yaml \
+            --timeout 10m \
+            --wait
 
       # Create namespace + dockerhub secret BEFORE helm upgrade
       - name: Prepare staging namespace
@@ -106,7 +162,15 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Deploy taskflow (staging)
-        run: #[...]
+        run: |
+          helm upgrade --install taskflow ./helm/taskflow \
+            --namespace staging \
+            -f helm/taskflow/values.yaml \
+            -f helm/taskflow/values.staging.yaml \
+            --set image.prefix=${{ env.IMAGE_PREFIX }} \
+            --set image.tag=${{ env.IMAGE_TAG }} \
+            --timeout 5m \
+            --wait
 
       - name: Smoke test — pods ready + /health
         run: |
@@ -126,7 +190,7 @@ jobs:
 
           echo ""
           echo "=== Health check ==="
-          kubectl port-forward svc/api-gateway 8080:3004 -n staging &
+          kubectl port-forward svc/api-gateway 8080:3000 -n staging &
           sleep 5
           curl --fail --silent --show-error http://localhost:8080/health
           echo ""
@@ -156,9 +220,29 @@ jobs:
         with:
           cluster_name: production
 
-      # In production, SMTP secrets would be injected from GitHub Secrets
+      # MISSING STEP: resolve chart dependencies before any helm install
+      - name: Update Helm dependencies
+        run: |
+          helm dependency update ./helm/monitoring
+          helm dependency update ./helm/taskflow
+
+      # In production, SMTP secrets are injected from GitHub Secrets (alertmanager
+      # is disabled by values.ci.yaml on this ephemeral runner, but we demonstrate
+      # the production secret-injection pattern via --set).
       - name: Deploy monitoring stack (production)
-        run: #[...]
+        run: |
+          helm upgrade --install monitoring ./helm/monitoring \
+            --namespace monitoring \
+            --create-namespace \
+            -f helm/monitoring/values.monitoring.yaml \
+            -f helm/monitoring/values.ci.yaml \
+            --set alertmanagerConfig.smtp.host="${{ secrets.SMTP_HOST }}" \
+            --set alertmanagerConfig.smtp.from="${{ secrets.SMTP_FROM }}" \
+            --set alertmanagerConfig.smtp.username="${{ secrets.SMTP_USERNAME }}" \
+            --set alertmanagerConfig.smtp.password="${{ secrets.SMTP_PASSWORD }}" \
+            --set alertmanagerConfig.smtp.to="${{ secrets.SMTP_TO }}" \
+            --timeout 10m \
+            --wait
 
       - name: Prepare production namespace
         run: |
@@ -171,7 +255,16 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Deploy taskflow (production)
-        run: #[...]
+        run: |
+          helm upgrade --install taskflow ./helm/taskflow \
+            --namespace production \
+            -f helm/taskflow/values.yaml \
+            -f helm/taskflow/values.production.yaml \
+            --set image.prefix=${{ env.IMAGE_PREFIX }} \
+            --set image.tag=${{ env.IMAGE_TAG }} \
+            --set postgres.password="${{ secrets.POSTGRES_PASSWORD_PROD }}" \
+            --timeout 5m \
+            --wait
 
       - name: Smoke test — pods ready + /health
         run: |
@@ -187,7 +280,7 @@ jobs:
 
           echo ""
           echo "=== Health check ==="
-          kubectl port-forward svc/api-gateway 8080:3004 -n production &
+          kubectl port-forward svc/api-gateway 8080:3000 -n production &
           sleep 5
           curl --fail --silent --show-error http://localhost:8080/health
           echo ""

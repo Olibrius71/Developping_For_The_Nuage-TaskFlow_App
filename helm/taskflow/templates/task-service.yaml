@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: task-service
-          image: "{{ .Values.image.prefix }}-task-service:{{ .Values.taskService.tag }}"
+          image: "{{ .Values.image.prefix }}-task-service:{{ .Values.taskService.tag | default .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: PORT

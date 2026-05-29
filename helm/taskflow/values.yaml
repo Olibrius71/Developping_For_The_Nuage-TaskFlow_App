@@ -1,5 +1,6 @@
 image:
   prefix: bruce1000/taskflow
+  tag: v1.0.0            # tag global par defaut (surchargeable via --set image.tag, ex: le SHA en CD)
   pullPolicy: IfNotPresent
 
 postgres:
@@ -16,7 +17,6 @@ jwt:
 
 userService:
   replicaCount: 2
-  tag: v1.0.1
   resources:
     requests:
       memory: "128Mi"
@@ -27,7 +27,6 @@ userService:
 
 frontend:
   replicaCount: 1
-  tag: v1.0.0
   resources:
     requests:
       memory: "32Mi"
@@ -38,7 +37,6 @@ frontend:
 
 taskService:
   replicaCount: 2
-  tag: v1.0.0
   hpa:
     enabled: false
     minReplicas: 2
@@ -54,7 +52,6 @@ taskService:
 
 notificationService:
   replicaCount: 1
-  tag: v1.0.0
   resources:
     requests:
       memory: "64Mi"
@@ -65,7 +62,6 @@ notificationService:
 
 apiGateway:
   replicaCount: 2
-  tag: v1.0.0
   resources:
     requests:
       memory: "128Mi"

@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: api-gateway
-          image: "{{ .Values.image.prefix }}-api-gateway:{{ .Values.apiGateway.tag }}"
+          image: "{{ .Values.image.prefix }}-api-gateway:{{ .Values.apiGateway.tag | default .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: PORT
