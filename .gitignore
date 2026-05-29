@@ -9,6 +9,7 @@ kubeconfig.yml
 # Helm
 values-secrets.yaml
 helm/taskflow/charts/
+helm/monitoring/charts/
 *.tgz
 /helm/monitoring/values.monitoring.secret.yaml
 helm/monitoring/values.monitoring.secret.yaml
