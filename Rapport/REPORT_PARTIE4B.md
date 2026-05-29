@@ -156,10 +156,11 @@ Resultat — nos 2 dashboards customs sont bien charges :
 ```
 Vue d'ensemble des services (uid: services-overview)
 ```
-
+voir image doc_partie4B
 ```
 Metriques metier TaskFlow (uid: business-metrics)
 ```
+voir image2 doc_partie4B
 
 ### Reflexion theorique — Limites du ConfigMap inline
 
